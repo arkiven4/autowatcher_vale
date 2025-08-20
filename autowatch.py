@@ -7,10 +7,11 @@ import psutil
 import datetime
 
 # --- Configuration ---
+ROOT_PROJECT = os.environ.get("ROOT_PROJECT")
 PROJECTS = [
     {
         "name": "cbm_vale",
-        "repo_path": "/home/arkiven4/Documents/Project/Vale/cbm_vale/",
+        "repo_path": f"{ROOT_PROJECT}/cbm_vale/",
         "branch_to_watch": "main",
         "script_to_run": "run.sh" if os.name != 'nt' else "run.bat",
         "github_repo": "arkiven4/cbm_vale",
@@ -20,7 +21,7 @@ PROJECTS = [
     },
     {
         "name": "tinymonitor-web",
-        "repo_path": "/home/arkiven4/Documents/Project/Vale/tinymonitor-web/",
+        "repo_path": f"{ROOT_PROJECT}/tinymonitor-web/",
         "branch_to_watch": "main",
         "script_to_run": "run.sh" if os.name != 'nt' else "run.bat",
         "github_repo": "arkiven4/tinymonitor-web",
