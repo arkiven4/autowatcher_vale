@@ -20,7 +20,6 @@ class WatcherThread(QThread):
                 "status": "Starting...", 
                 "script_status": "Starting...",
                 "start_time": 0,
-                "startup_failed": False,
             }
             for project in autowatch.PROJECTS
         }
@@ -51,7 +50,6 @@ class WatcherThread(QThread):
                         state["process"] = process
                         state["retry_count"] = 0
                         state["start_time"] = time.time()
-                        state["startup_failed"] = False
                     else:
                         state["status"] = "Error Pulling"
                 else:
@@ -60,14 +58,15 @@ class WatcherThread(QThread):
                 # Check process status
                 if state["process"] and state["process"].poll() is not None:
                     # Process has terminated
-                    if state["process"].returncode != 0:
-                        # Process terminated with an error
-                        if not state["startup_failed"]:
-                            state["script_status"] = "Crashed during startup"
-                            state["startup_failed"] = True
+                    is_startup_failure = time.time() - state["start_time"] < project["startup_period"]
+                    
+                    if is_startup_failure:
+                        if state["script_status"] != "Startup Failure":
+                            state["script_status"] = "Startup Failure"
                             stdout, stderr = state["process"].communicate()
-                            autowatch.save_log_and_create_issue(project, f"Failed to start {project_name}", stdout, stderr)
-                        
+                            autowatch.save_log_and_create_issue(project, f"Startup Failure: {project_name}", stdout, stderr)
+                    elif state["process"].returncode != 0:
+                        # Process terminated with an error after startup
                         if state["retry_count"] < project["max_retries"]:
                             current_time = time.time()
                             if current_time - state["last_retry_time"] > project["retry_delay"]:
@@ -77,12 +76,13 @@ class WatcherThread(QThread):
                                 state["retry_count"] += 1
                                 state["last_retry_time"] = time.time()
                                 state["start_time"] = time.time()
-                                state["startup_failed"] = False
                             else:
                                 state["script_status"] = f"Crashed. Waiting to retry..."
                         else:
                             if state["script_status"] != "Failed to start. Max retries reached.":
                                 state["script_status"] = "Failed to start. Max retries reached."
+                                stdout, stderr = state["process"].communicate()
+                                autowatch.save_log_and_create_issue(project, f"Crash after retries: {project_name}", stdout, stderr)
                     else:
                         state["script_status"] = "Stopped"
                         state["process"] = None # Reset process
@@ -101,7 +101,6 @@ class WatcherThread(QThread):
                         state["retry_count"] += 1
                         state["last_retry_time"] = time.time()
                         state["start_time"] = time.time()
-                        state["startup_failed"] = False
                     else:
                         state["script_status"] = f"Stopped. Waiting to retry..."
                 elif not state["process"]:
