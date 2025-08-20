@@ -7,27 +7,30 @@ import psutil
 import datetime
 
 # --- Configuration ---
-ROOT_PROJECT = os.environ.get("ROOT_PROJECT")
+ROOT_PROJECT = os.environ.get("ROOT_PROJECT", "/home/arkiven4/Documents/Project/Vale")
+
 PROJECTS = [
     {
         "name": "cbm_vale",
-        "repo_path": f"{ROOT_PROJECT}/cbm_vale/",
+        "repo_path": os.path.join(ROOT_PROJECT, "cbm_vale"),
         "branch_to_watch": "main",
         "script_to_run": "run.sh" if os.name != 'nt' else "run.bat",
         "github_repo": "arkiven4/cbm_vale",
         "process_name": "run_cbm.py",
         "max_retries": 3,
         "retry_delay": 10,
+        "startup_period": 180, # 3 minutes
     },
     {
         "name": "tinymonitor-web",
-        "repo_path": f"{ROOT_PROJECT}/tinymonitor-web/",
+        "repo_path": os.path.join(ROOT_PROJECT, "tinymonitor-web"),
         "branch_to_watch": "main",
         "script_to_run": "run.sh" if os.name != 'nt' else "run.bat",
         "github_repo": "arkiven4/tinymonitor-web",
         "process_name": "manage.py",
         "max_retries": 3,
         "retry_delay": 10,
+        "startup_period": 180, # 3 minutes
     },
 ]
 
@@ -109,21 +112,18 @@ def stop_process(process_name):
                     print(f"Error stopping process {proc.info['pid']}: {e}")
 
 def start_process(project):
-    """Starts the specified script and returns the process, stdout, and stderr."""
+    """Starts the specified script and returns the process object."""
     script_path = os.path.join(project["repo_path"], project["script_to_run"])
     try:
         if os.name == 'nt': # Windows
             process = subprocess.Popen([script_path], creationflags=subprocess.CREATE_NEW_CONSOLE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         else: # Linux/macOS
             process = subprocess.Popen(["bash", script_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        
-        # Non-blocking read of stdout and stderr
-        stdout, stderr = process.communicate()
-        print(f"Script {project['name']} terminated with return code {process.returncode}.")
-        return process, stdout, stderr
+        print(f"Successfully started script for {project['name']}.")
+        return process
     except Exception as e:
         print(f"Error starting script for {project['name']}: {e}")
-        return None, "", str(e)
+        return None
 
 def create_github_issue(project, title, body):
     """Creates a new issue on GitHub."""
@@ -154,7 +154,7 @@ def save_log_and_create_issue(project, title, stdout, stderr):
 
     with open(log_filepath, "w") as f:
         f.write(f"--- STDOUT ---\n{stdout}\n")
-        f.write(f"--- STDERR ---/n{stderr}\n")
+        f.write(f"--- STDERR ---\n{stderr}\n")
 
     body = f"Error starting script for {project['name']}.\n\nLog file: `{log_filename}`\n\n--- STDOUT ---\n```\n{stdout}```\n\n--- STDERR ---\n```\n{stderr}```"
     create_github_issue(project, title, body)
