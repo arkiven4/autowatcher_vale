@@ -140,7 +140,7 @@ def start_process(project):
     try:
         if os.name == 'nt': # Windows
             if AUTOWATCH_ENV == "dev":
-                process = subprocess.Popen([script_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                process = subprocess.Popen(["cmd", "/k", script_path], creationflags=subprocess.CREATE_NEW_CONSOLE)
             else:
                 process = subprocess.Popen([script_path], creationflags=subprocess.CREATE_NO_WINDOW, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         else: # Linux/macOS
