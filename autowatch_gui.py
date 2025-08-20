@@ -20,6 +20,7 @@ class WatcherThread(QThread):
                 "status": "Starting...", 
                 "script_status": "Starting...",
                 "start_time": 0,
+                "last_fetch_time": 0,
             }
             for project in autowatch.PROJECTS
         }
@@ -40,20 +41,23 @@ class WatcherThread(QThread):
                 repo = repos[project_name]
 
                 # Check for new commits
-                if autowatch.has_new_commit(repo, project["branch_to_watch"]):
-                    state["status"] = "Pulling"
-                    if autowatch.pull_latest_changes(repo, project):
-                        state["status"] = "Restarting Script"
-                        if state["process"] and state["process"].poll() is None:
-                            autowatch.stop_process(project["process_name"])
-                        process = autowatch.start_process(project)
-                        state["process"] = process
-                        state["retry_count"] = 0
-                        state["start_time"] = time.time()
+                current_time = time.time()
+                if current_time - state["last_fetch_time"] > autowatch.FETCH_INTERVAL:
+                    if autowatch.has_new_commit(repo, project["branch_to_watch"]):
+                        state["status"] = "Pulling"
+                        if autowatch.pull_latest_changes(repo, project):
+                            state["status"] = "Restarting Script"
+                            if state["process"] and state["process"].poll() is None:
+                                autowatch.stop_process(project["process_name"])
+                            process = autowatch.start_process(project)
+                            state["process"] = process
+                            state["retry_count"] = 0
+                            state["start_time"] = time.time()
+                        else:
+                            state["status"] = "Error Pulling"
                     else:
-                        state["status"] = "Error Pulling"
-                else:
-                    state["status"] = "Watching"
+                        state["status"] = "Watching"
+                    state["last_fetch_time"] = current_time
 
                 # Check process status
                 if state["process"] and state["process"].poll() is not None:

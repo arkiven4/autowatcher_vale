@@ -8,6 +8,9 @@ import datetime
 
 # --- Configuration ---
 ROOT_PROJECT = os.environ.get("ROOT_PROJECT", "/home/arkiven4/Documents/Project/Vale")
+AUTOWATCH_ENV = os.environ.get("AUTOWATCH_ENV", "dev")
+
+FETCH_INTERVAL = 60 if AUTOWATCH_ENV == "dev" else 300 # 1 minute for dev, 5 minutes for prod
 
 PROJECTS = [
     {
@@ -136,7 +139,10 @@ def start_process(project):
     script_path = os.path.join(project["repo_path"], project["script_to_run"])
     try:
         if os.name == 'nt': # Windows
-            process = subprocess.Popen([script_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if AUTOWATCH_ENV == "dev":
+                process = subprocess.Popen([script_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            else:
+                process = subprocess.Popen([script_path], creationflags=subprocess.CREATE_NO_WINDOW, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         else: # Linux/macOS
             process = subprocess.Popen(["bash", script_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         print(f"Successfully started script for {project['name']}.")
