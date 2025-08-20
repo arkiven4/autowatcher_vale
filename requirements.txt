@@ -1,0 +1,4 @@
+GitPython
+requests
+psutil
+PyQt5
