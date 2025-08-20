@@ -11,12 +11,23 @@ ROOT_PROJECT = os.environ.get("ROOT_PROJECT", "/home/arkiven4/Documents/Project/
 
 PROJECTS = [
     {
-        "name": "cbm_vale",
+        "name": "cbm_vale_cbm",
         "repo_path": os.path.join(ROOT_PROJECT, "cbm_vale"),
         "branch_to_watch": "main",
-        "script_to_run": "run.sh" if os.name != 'nt' else "run.bat",
+        "script_to_run": "run_cbm.sh" if os.name != 'nt' else "run_cbm.bat",
         "github_repo": "arkiven4/cbm_vale",
         "process_name": "run_cbm.py",
+        "max_retries": 3,
+        "retry_delay": 10,
+        "startup_period": 180, # 3 minutes
+    },
+    {
+        "name": "cbm_vale_kpi",
+        "repo_path": os.path.join(ROOT_PROJECT, "cbm_vale"),
+        "branch_to_watch": "main",
+        "script_to_run": "run_kpi.sh" if os.name != 'nt' else "run_kpi.bat",
+        "github_repo": "arkiven4/cbm_vale",
+        "process_name": "run_kpi.py",
         "max_retries": 3,
         "retry_delay": 10,
         "startup_period": 180, # 3 minutes
@@ -48,19 +59,28 @@ def get_latest_commit_hash(repo):
 def has_new_commit(repo, branch):
     """Checks if there is a new commit in the remote repository."""
     if not repo.remotes:
-        print("No remotes found in the repository.")
+        print(f"No remotes found in the repository: {repo.working_dir}")
         return False
     try:
         remote = repo.remotes[0]
+        print(f"Fetching from remote: {remote.url}")
         remote.fetch()
         local_hash = repo.head.commit.hexsha
         remote_hash = remote.refs[branch].commit.hexsha
-        return local_hash != remote_hash
+        if local_hash != remote_hash:
+            print(f"New commit found: {remote_hash}")
+            return True
+        else:
+            print("No new commits.")
+            return False
     except git.exc.GitCommandError as e:
         print(f"Error fetching remote: {e}")
         return False
     except IndexError:
         print(f"Branch {branch} not found on remote.")
+        return False
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
         return False
 
 def pull_latest_changes(repo, project):
@@ -116,7 +136,7 @@ def start_process(project):
     script_path = os.path.join(project["repo_path"], project["script_to_run"])
     try:
         if os.name == 'nt': # Windows
-            process = subprocess.Popen([script_path], creationflags=subprocess.CREATE_NEW_CONSOLE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            process = subprocess.Popen([script_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         else: # Linux/macOS
             process = subprocess.Popen(["bash", script_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         print(f"Successfully started script for {project['name']}.")
