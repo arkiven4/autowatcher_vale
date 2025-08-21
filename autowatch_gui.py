@@ -163,7 +163,7 @@ class App(QWidget):
     """The main application GUI."""
     def __init__(self):
         super().__init__()
-        self.title = 'AutoWatch Status'
+        self.title = 'AutoWatch Status - Beta'
         self.project_widgets = {}
         self.initUI()
 
