@@ -2,3 +2,4 @@ GitPython
 requests
 psutil
 PyQt5
+python-dotenv

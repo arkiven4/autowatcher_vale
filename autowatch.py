@@ -5,6 +5,10 @@ import git
 import requests
 import psutil
 import datetime
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # --- Configuration ---
 ROOT_PROJECT = os.environ.get("ROOT_PROJECT", "/home/arkiven4/Documents/Project/Vale")
