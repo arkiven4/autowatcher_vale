@@ -66,12 +66,18 @@ class WatcherThread(QThread):
                             # If new commit is found, pull changes and restart all projects in this repo
                             for project in repo_data["projects"]:
                                 if project["name"] == "autowatcher_vale":
-                                    # If the updated project is the autowatcher, emit restart signal
+                                    # If the updated project is the autowatcher, first stop all other processes
+                                    print("Self-update detected. Stopping all monitored processes before restarting...")
+                                    for p in autowatch.PROJECTS:
+                                        if p["name"] != "autowatcher_vale":
+                                            state = self.project_states[p["name"]]
+                                            if state["process"] and state["process"].poll() is None:
+                                                autowatch.stop_process(p)
+                                    
+                                    # Now, emit the restart signal
                                     self.restart_required.emit()
-                                    # Wait a bit to allow the signal to be processed
                                     time.sleep(1)
-                                    # The application will exit, so we just return from the thread
-                                    return 
+                                    return
                                 else:
                                     # For other projects, restart the script
                                     state = self.project_states[project["name"]]
