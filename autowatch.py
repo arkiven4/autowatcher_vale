@@ -52,7 +52,7 @@ PROJECTS = [
     },
     {
         "name": "autowatcher_vale",
-        "repo_path": os.path.join(ROOT_PROJECT, "AutoWatch"),
+        "repo_path": os.path.join(ROOT_PROJECT, "autowatcher_vale"),
         "branch_to_watch": "main",
         "script_to_run": "launcher.sh" if os.name != 'nt' else "launcher.bat",
         "github_repo": "arkiven4/autowatcher_vale",
