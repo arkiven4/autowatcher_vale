@@ -109,30 +109,30 @@ def is_process_running(process_name):
             return True
     return False
 
-def stop_process(process_name):
-    """Stops the currently running process."""
-    if os.name == 'nt': # Windows
+def stop_process(project):
+    """Stops the currently running process for a given project."""
+    process_name = project["process_name"]
+    script_to_run = project["script_to_run"]
+    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
         try:
-            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                if process_name in " ".join(proc.info['cmdline'] or []):
-                    subprocess.run(["taskkill", "/F", "/PID", str(proc.info['pid'])], check=True)
-                    print(f"Process {process_name} stopped.")
-                    return
-        except subprocess.CalledProcessError as e:
-            print(f"Error stopping process {process_name}: {e}")
-    else: # Linux/macOS
-        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
             cmdline = proc.info.get('cmdline') or []
-            if process_name in proc.info['name'] or process_name in " ".join(cmdline):
-                try:
-                    p = psutil.Process(proc.info['pid'])
-                    p.terminate()
-                    p.wait()
-                    print(f"Process {process_name} (PID: {proc.info['pid']}) stopped.")
-                except psutil.NoSuchProcess:
-                    print(f"Process {process_name} (PID: {proc.info['pid']}) already terminated.")
-                except Exception as e:
-                    print(f"Error stopping process {proc.info['pid']}: {e}")
+            # Check if the process name or script to run is in the command line
+            if process_name in " ".join(cmdline) or script_to_run in " ".join(cmdline):
+                print(f"Found process to stop: {proc.info['name']} (PID: {proc.pid}) - {' '.join(cmdline)}")
+                p = psutil.Process(proc.pid)
+                # Terminate children first to prevent orphans
+                for child in p.children(recursive=True):
+                    print(f"Stopping child process (PID: {child.pid})")
+                    child.terminate()
+                p.terminate()
+                p.wait()
+                print(f"Process {process_name} (PID: {proc.pid}) and its children have been terminated.")
+        except psutil.NoSuchProcess:
+            print(f"Process with PID {proc.pid} already terminated.")
+        except psutil.AccessDenied:
+            print(f"Access denied to process with PID {proc.pid}.")
+        except Exception as e:
+            print(f"An error occurred while trying to stop process {proc.pid}: {e}")
 
 def start_process(project):
     """Starts the specified script and returns the process object."""

@@ -27,37 +27,64 @@ class WatcherThread(QThread):
 
     def run(self):
         """The main logic of the watcher thread."""
-        repos = {project["name"]: autowatch.git.Repo(project["repo_path"]) for project in autowatch.PROJECTS}
-
+        # Group projects by repo_path
+        repos = {}
         for project in autowatch.PROJECTS:
-            process = autowatch.start_process(project)
-            self.project_states[project["name"]]["process"] = process
-            self.project_states[project["name"]]["start_time"] = time.time()
+            repo_path = project["repo_path"]
+            if repo_path not in repos:
+                repos[repo_path] = {
+                    "repo_instance": autowatch.git.Repo(repo_path),
+                    "projects": []
+                }
+            repos[repo_path]["projects"].append(project)
+
+        # Initial start of all processes
+        for repo_path, repo_data in repos.items():
+            for project in repo_data["projects"]:
+                process = autowatch.start_process(project)
+                self.project_states[project["name"]]["process"] = process
+                self.project_states[project["name"]]["start_time"] = time.time()
 
         while True:
+            for repo_path, repo_data in repos.items():
+                repo_instance = repo_data["repo_instance"]
+                
+                # Check for new commits for the repo
+                # We only check one project's branch, assuming all projects in a repo share the same branch to watch
+                project_for_branch_check = repo_data["projects"][0]
+                current_time = time.time()
+
+                # Use the state of the first project for timing the fetch
+                first_project_name = project_for_branch_check["name"]
+                if current_time - self.project_states[first_project_name]["last_fetch_time"] > autowatch.FETCH_INTERVAL:
+                    self.project_states[first_project_name]["last_fetch_time"] = current_time
+                    
+                    if autowatch.has_new_commit(repo_instance, project_for_branch_check["branch_to_watch"]):
+                        # If new commit is found, pull changes and restart all projects in this repo
+                        if autowatch.pull_latest_changes(repo_instance, project_for_branch_check):
+                            for project in repo_data["projects"]:
+                                state = self.project_states[project["name"]]
+                                state["status"] = "Restarting Script"
+                                self.project_status_changed.emit(project["name"], state["status"], state["script_status"])
+                                
+                                if state["process"] and state["process"].poll() is None:
+                                    autowatch.stop_process(project) # Pass the whole project object
+                                
+                                process = autowatch.start_process(project)
+                                state["process"] = process
+                                state["retry_count"] = 0
+                                state["start_time"] = time.time()
+                        else:
+                            for project in repo_data["projects"]:
+                                self.project_states[project["name"]]["status"] = "Error Pulling"
+                    else:
+                        for project in repo_data["projects"]:
+                            self.project_states[project["name"]]["status"] = "Watching"
+
+            # Process status checks (same as before, but iterated through all projects)
             for project in autowatch.PROJECTS:
                 project_name = project["name"]
                 state = self.project_states[project_name]
-                repo = repos[project_name]
-
-                # Check for new commits
-                current_time = time.time()
-                if current_time - state["last_fetch_time"] > autowatch.FETCH_INTERVAL:
-                    if autowatch.has_new_commit(repo, project["branch_to_watch"]):
-                        state["status"] = "Pulling"
-                        if autowatch.pull_latest_changes(repo, project):
-                            state["status"] = "Restarting Script"
-                            if state["process"] and state["process"].poll() is None:
-                                autowatch.stop_process(project["process_name"])
-                            process = autowatch.start_process(project)
-                            state["process"] = process
-                            state["retry_count"] = 0
-                            state["start_time"] = time.time()
-                        else:
-                            state["status"] = "Error Pulling"
-                    else:
-                        state["status"] = "Watching"
-                    state["last_fetch_time"] = current_time
 
                 # Check process status
                 if state["process"] and state["process"].poll() is not None:
