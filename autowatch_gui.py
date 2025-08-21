@@ -9,6 +9,7 @@ import autowatch
 class WatcherThread(QThread):
     """Runs the autowatch logic in a separate thread."""
     project_status_changed = pyqtSignal(str, str, str)
+    restart_required = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -41,6 +42,9 @@ class WatcherThread(QThread):
         # Initial start of all processes
         for repo_path, repo_data in repos.items():
             for project in repo_data["projects"]:
+                # Don't start the autowatcher itself, the launcher does that
+                if project["name"] == "autowatcher_vale":
+                    continue
                 process = autowatch.start_process(project)
                 self.project_states[project["name"]]["process"] = process
                 self.project_states[project["name"]]["start_time"] = time.time()
@@ -50,30 +54,37 @@ class WatcherThread(QThread):
                 repo_instance = repo_data["repo_instance"]
                 
                 # Check for new commits for the repo
-                # We only check one project's branch, assuming all projects in a repo share the same branch to watch
                 project_for_branch_check = repo_data["projects"][0]
                 current_time = time.time()
 
-                # Use the state of the first project for timing the fetch
                 first_project_name = project_for_branch_check["name"]
                 if current_time - self.project_states[first_project_name]["last_fetch_time"] > autowatch.FETCH_INTERVAL:
                     self.project_states[first_project_name]["last_fetch_time"] = current_time
                     
                     if autowatch.has_new_commit(repo_instance, project_for_branch_check["branch_to_watch"]):
-                        # If new commit is found, pull changes and restart all projects in this repo
                         if autowatch.pull_latest_changes(repo_instance, project_for_branch_check):
+                            # If new commit is found, pull changes and restart all projects in this repo
                             for project in repo_data["projects"]:
-                                state = self.project_states[project["name"]]
-                                state["status"] = "Restarting Script"
-                                self.project_status_changed.emit(project["name"], state["status"], state["script_status"])
-                                
-                                if state["process"] and state["process"].poll() is None:
-                                    autowatch.stop_process(project) # Pass the whole project object
-                                
-                                process = autowatch.start_process(project)
-                                state["process"] = process
-                                state["retry_count"] = 0
-                                state["start_time"] = time.time()
+                                if project["name"] == "autowatcher_vale":
+                                    # If the updated project is the autowatcher, emit restart signal
+                                    self.restart_required.emit()
+                                    # Wait a bit to allow the signal to be processed
+                                    time.sleep(1)
+                                    # The application will exit, so we just return from the thread
+                                    return 
+                                else:
+                                    # For other projects, restart the script
+                                    state = self.project_states[project["name"]]
+                                    state["status"] = "Restarting Script"
+                                    self.project_status_changed.emit(project["name"], state["status"], state["script_status"])
+                                    
+                                    if state["process"] and state["process"].poll() is None:
+                                        autowatch.stop_process(project)
+                                    
+                                    process = autowatch.start_process(project)
+                                    state["process"] = process
+                                    state["retry_count"] = 0
+                                    state["start_time"] = time.time()
                         else:
                             for project in repo_data["projects"]:
                                 self.project_states[project["name"]]["status"] = "Error Pulling"
@@ -81,14 +92,16 @@ class WatcherThread(QThread):
                         for project in repo_data["projects"]:
                             self.project_states[project["name"]]["status"] = "Watching"
 
-            # Process status checks (same as before, but iterated through all projects)
+            # Process status checks
             for project in autowatch.PROJECTS:
+                if project["name"] == "autowatcher_vale":
+                    continue # Don't check status for the autowatcher itself
+
                 project_name = project["name"]
                 state = self.project_states[project_name]
 
-                # Check process status
+                # Check process status (same as before)
                 if state["process"] and state["process"].poll() is not None:
-                    # Process has terminated
                     is_startup_failure = time.time() - state["start_time"] < project["startup_period"]
                     
                     if is_startup_failure:
@@ -97,7 +110,6 @@ class WatcherThread(QThread):
                             stdout, stderr = state["process"].communicate()
                             autowatch.save_log_and_create_issue(project, f"Startup Failure: {project_name}", stdout, stderr)
                     elif state["process"].returncode != 0:
-                        # Process terminated with an error after startup
                         if state["retry_count"] < project["max_retries"]:
                             current_time = time.time()
                             if current_time - state["last_retry_time"] > project["retry_delay"]:
@@ -116,14 +128,13 @@ class WatcherThread(QThread):
                                 autowatch.save_log_and_create_issue(project, f"Crash after retries: {project_name}", stdout, stderr)
                     else:
                         state["script_status"] = "Stopped"
-                        state["process"] = None # Reset process
+                        state["process"] = None
                 elif state["process"] and time.time() - state["start_time"] > project["startup_period"]:
                     state["script_status"] = "Running"
                     state["retry_count"] = 0
                 elif state["process"]:
                     state["script_status"] = "Starting up..."
                 elif not state["process"] and state["retry_count"] < project["max_retries"]:
-                    # Process is not running, and we can retry
                     current_time = time.time()
                     if current_time - state["last_retry_time"] > project["retry_delay"]:
                         state["script_status"] = f"Stopped. Retrying ({state['retry_count'] + 1}/{project['max_retries']})"
@@ -140,7 +151,7 @@ class WatcherThread(QThread):
 
                 self.project_status_changed.emit(project_name, state["status"], state["script_status"])
 
-            self.msleep(5000)  # Check every 5 seconds
+            self.msleep(5000)
 
 class App(QWidget):
     """The main application GUI."""
@@ -155,6 +166,10 @@ class App(QWidget):
             self.project_widgets[project_name]["status_label"].setText(f"Status: {status}")
             self.project_widgets[project_name]["script_status_label"].setText(f"Script Status: {script_status}")
             self.project_widgets[project_name]["last_update_label"].setText(f"Last Update: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+    def handle_restart(self):
+        print("Restart signal received. Exiting with code 10.")
+        QApplication.instance().exit(10)
 
     def initUI(self):
         self.setWindowTitle(self.title)
@@ -184,6 +199,7 @@ class App(QWidget):
 
         self.thread = WatcherThread()
         self.thread.project_status_changed.connect(self.set_project_status)
+        self.thread.restart_required.connect(self.handle_restart)
         self.thread.start()
 
 if __name__ == '__main__':

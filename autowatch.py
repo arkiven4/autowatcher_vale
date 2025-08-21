@@ -46,6 +46,17 @@ PROJECTS = [
         "retry_delay": 10,
         "startup_period": 180, # 3 minutes
     },
+    {
+        "name": "autowatcher_vale",
+        "repo_path": os.path.join(ROOT_PROJECT, "AutoWatch"),
+        "branch_to_watch": "main",
+        "script_to_run": "launcher.sh" if os.name != 'nt' else "launcher.bat",
+        "github_repo": "arkiven4/autowatcher_vale",
+        "process_name": "autowatch_gui.py",
+        "max_retries": 3,
+        "retry_delay": 10,
+        "startup_period": 180, # 3 minutes
+    },
 ]
 
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
