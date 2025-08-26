@@ -62,7 +62,7 @@ class WatcherThread(QThread):
                     self.project_states[first_project_name]["last_fetch_time"] = current_time
                     
                     if autowatch.has_new_commit(repo_instance, project_for_branch_check["branch_to_watch"]):
-                        if autowatch.pull_latest_changes(repo_instance, project_for_branch_check):
+                        if autowatch.pull_latest_changes(repo_instance, project_for_branch_check, strategy='theirs'):
                             # If new commit is found, pull changes and restart all projects in this repo
                             for project in repo_data["projects"]:
                                 if project["name"] == "autowatcher_vale":
@@ -114,12 +114,14 @@ class WatcherThread(QThread):
                         if state["script_status"] != "Startup Failure":
                             state["script_status"] = "Startup Failure"
                             stdout, stderr = state["process"].communicate()
+                            print(f"Process {project_name} failed during startup. stdout: {stdout}, stderr: {stderr}")
                             autowatch.save_log_and_create_issue(project, f"Startup Failure: {project_name}", stdout, stderr)
                     elif state["process"].returncode != 0:
                         if state["retry_count"] < project["max_retries"]:
                             current_time = time.time()
                             if current_time - state["last_retry_time"] > project["retry_delay"]:
                                 state["script_status"] = f"Crashed. Retrying ({state['retry_count'] + 1}/{project['max_retries']})"
+                                print(f"Process {project_name} crashed. Retrying...")
                                 process = autowatch.start_process(project)
                                 state["process"] = process
                                 state["retry_count"] += 1
@@ -130,6 +132,7 @@ class WatcherThread(QThread):
                         else:
                             if state["script_status"] != "Failed to start. Max retries reached.":
                                 state["script_status"] = "Failed to start. Max retries reached."
+                                print(f"Process {project_name} reached max retries.")
                                 stdout, stderr = state["process"].communicate()
                                 autowatch.save_log_and_create_issue(project, f"Crash after retries: {project_name}", stdout, stderr)
                     else:
@@ -144,6 +147,7 @@ class WatcherThread(QThread):
                     current_time = time.time()
                     if current_time - state["last_retry_time"] > project["retry_delay"]:
                         state["script_status"] = f"Stopped. Retrying ({state['retry_count'] + 1}/{project['max_retries']})"
+                        print(f"Process {project_name} is not running. Retrying...")
                         process = autowatch.start_process(project)
                         state["process"] = process
                         state["retry_count"] += 1
@@ -154,6 +158,7 @@ class WatcherThread(QThread):
                 elif not state["process"]:
                      if state["script_status"] != "Failed to start. Max retries reached.":
                         state["script_status"] = "Failed to start. Max retries reached."
+                        print(f"Process {project_name} is not running and max retries reached.")
 
                 self.project_status_changed.emit(project_name, state["status"], state["script_status"])
 

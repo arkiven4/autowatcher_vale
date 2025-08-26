@@ -101,15 +101,15 @@ def has_new_commit(repo, branch):
         print(f"An unexpected error occurred: {e}")
         return False
 
-def pull_latest_changes(repo, project):
+def pull_latest_changes(repo, project, strategy='theirs'):
     """Pulls the latest changes from the remote repository."""
     if not repo.remotes:
         print("No remotes found in the repository.")
         return False
     try:
         remote = repo.remotes[0]
-        remote.pull()
-        print(f"Successfully pulled latest changes for {project['name']}.")
+        remote.pull(strategy_option=strategy)
+        print(f"Successfully pulled latest changes for {project['name']} with strategy {strategy}.")
         return True
     except git.exc.GitCommandError as e:
         print(f"Error pulling changes for {project['name']}: {e}")
